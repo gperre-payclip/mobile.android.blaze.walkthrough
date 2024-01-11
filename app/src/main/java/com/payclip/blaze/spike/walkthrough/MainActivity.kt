@@ -22,6 +22,7 @@ import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,12 +39,14 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toOffset
 import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.zIndex
+import com.payclip.blaze.spike.walkthrough.models.SpotlightBuilder
 import com.payclip.blaze.spike.walkthrough.ui.theme.BlazeTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlin.math.roundToInt
@@ -69,13 +72,11 @@ class MainActivity : ComponentActivity() {
 private fun MainContent(viewModel: MainViewModel) {
     val isWalkthroughActive by viewModel.isWalkthroughActive.collectAsState()
     val selectedStep by viewModel.selectedStep.collectAsState()
-    var spotlightSize by remember { mutableStateOf(IntSize(0, 0)) }
-    var spotlightPosition by remember { mutableStateOf(IntOffset(0, 0)) }
+    var spotlight by remember { mutableStateOf(SpotlightBuilder()) }
 
     if (isWalkthroughActive) {
         Spotlight(
-            position = spotlightPosition,
-            size = spotlightSize
+            spotlight = spotlight
         )
     }
 
@@ -86,14 +87,16 @@ private fun MainContent(viewModel: MainViewModel) {
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         repeat(4) { index ->
-            var size by remember { mutableStateOf(IntSize(0, 0)) }
-            var position by remember { mutableStateOf(IntOffset(0, 0)) }
+            val spotlightLayout = remember { mutableStateOf(SpotlightBuilder()) }
             val tooltipState = rememberTooltipState(isPersistent = true)
 
-            LaunchedEffect(selectedStep, position, size) {
+            LaunchedEffect(selectedStep, spotlightLayout) {
                 if (isWalkthroughActive && selectedStep == index) {
-                    spotlightSize = size
-                    spotlightPosition = position
+                    spotlight = SpotlightBuilder(
+                        position = spotlightLayout.value.position,
+                        size = spotlightLayout.value.size,
+                        cornerRadius = spotlightLayout.value.cornerRadius
+                    )
                     tooltipState.show()
                 } else {
                     tooltipState.dismiss()
@@ -125,25 +128,13 @@ private fun MainContent(viewModel: MainViewModel) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(160.dp)
-                        .onGloballyPositioned {
-                            position = if (it.isAttached) {
-                                with(it.positionInRoot()) {
-                                    IntOffset(x.roundToInt(), y.roundToInt())
-                                }
-                            } else {
-                                IntOffset(0, 0)
-                            }
-
-                            size = if (it.isAttached) {
-                                it.size
-                            } else {
-                                IntSize(0, 0)
-                            }
-                        },
+                        .getSpotlightLayout(
+                            spotlight = spotlightLayout,
+                            cornerRadius = 4.dp
+                        ),
                     shape = RoundedCornerShape(4.dp),
                     color = Color(0xFFFF5656),
-                    shadowElevation = 4.dp,
-                    tonalElevation = 4.dp
+                    shadowElevation = 4.dp
                 ) {
                     // no-content
                 }
@@ -152,10 +143,36 @@ private fun MainContent(viewModel: MainViewModel) {
     }
 }
 
+private fun Modifier.getSpotlightLayout(
+    spotlight: MutableState<SpotlightBuilder>,
+    cornerRadius: Dp = 0.dp
+): Modifier {
+    return onGloballyPositioned {
+        val position = if (it.isAttached) {
+            with(it.positionInRoot()) {
+                IntOffset(x.roundToInt(), y.roundToInt())
+            }
+        } else {
+            IntOffset(0, 0)
+        }
+
+        val size = if (it.isAttached) {
+            it.size
+        } else {
+            IntSize(0, 0)
+        }
+
+        spotlight.value = SpotlightBuilder(
+            position = position,
+            size = size,
+            cornerRadius = cornerRadius
+        )
+    }
+}
+
 @Composable
 private fun Spotlight(
-    position: IntOffset,
-    size: IntSize
+    spotlight: SpotlightBuilder
 ) {
     Canvas(
         modifier = Modifier
@@ -166,10 +183,10 @@ private fun Spotlight(
                 addRoundRect(
                     roundRect = RoundRect(
                         rect = Rect(
-                            offset = position.toOffset(),
-                            size = size.toSize()
+                            offset = spotlight.position.toOffset(),
+                            size = spotlight.size.toSize()
                         ),
-                        cornerRadius = CornerRadius(4.dp.toPx())
+                        cornerRadius = CornerRadius(spotlight.cornerRadius.toPx())
                     )
                 )
             }
