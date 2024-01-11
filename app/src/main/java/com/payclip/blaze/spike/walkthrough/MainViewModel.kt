@@ -24,7 +24,7 @@ internal class MainViewModel @Inject constructor() : ViewModel() {
     }
 
     fun goNextStep() = viewModelScope.launch {
-        if (selectedStep.value < 3) {
+        if (selectedStep.value < 7) {
             _selectedStep.value++
         } else {
             _selectedStep.emit(0)
