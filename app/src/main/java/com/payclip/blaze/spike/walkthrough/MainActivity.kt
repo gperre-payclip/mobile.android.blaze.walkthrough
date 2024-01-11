@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -109,7 +110,10 @@ private fun MainContent(viewModel: MainViewModel) {
                     viewModel.goNextStep()
                 },
                 onSecondaryButtonClick = {
-                     viewModel.onFinishWalkthrough()
+                    // no-op
+                },
+                onDismiss = {
+                    viewModel.onFinishWalkthrough()
                 },
                 actualStep = index + 1,
                 totalSteps = 4
@@ -141,6 +145,7 @@ private fun WalkthroughComponent(
     secondaryButtonText: String,
     onPrimaryButtonClick: () -> Unit,
     onSecondaryButtonClick: () -> Unit,
+    onDismiss: () -> Unit,
     actualStep: Int,
     totalSteps: Int,
     content: @Composable (modifier: Modifier) -> Unit
@@ -152,6 +157,12 @@ private fun WalkthroughComponent(
             tooltipState.show()
         } else {
             tooltipState.dismiss()
+        }
+    }
+
+    LaunchedEffect(tooltipState.isVisible) {
+        if (isSelected && !tooltipState.isVisible) {
+            onDismiss()
         }
     }
 
@@ -213,13 +224,15 @@ private fun WalkthroughDialog(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
                     modifier = Modifier.weight(1F),
                     text = title,
-                    style = ClipTypography.titleMedium,
+                    style = ClipTypography.titleSmall,
                     color = Color(0xFF25282A),
+                    fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.Left,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -238,6 +251,7 @@ private fun WalkthroughDialog(
             )
             Row(
                 modifier = Modifier.align(Alignment.End),
+                verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Button(
@@ -250,7 +264,8 @@ private fun WalkthroughDialog(
                     Text(
                         text = secondaryButtonText,
                         style = ClipTypography.labelLarge,
-                        color = Color(0xFF353536)
+                        color = Color(0xFF353536),
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
                 Button(
@@ -263,7 +278,8 @@ private fun WalkthroughDialog(
                     Text(
                         text = primaryButtonText,
                         style = ClipTypography.labelLarge,
-                        color = Color(0xFFFFFFFF)
+                        color = Color(0xFFFFFFFF),
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
             }
