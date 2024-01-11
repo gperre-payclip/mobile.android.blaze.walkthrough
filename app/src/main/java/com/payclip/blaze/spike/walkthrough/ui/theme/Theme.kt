@@ -54,7 +54,7 @@ internal fun BlazeTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography,
+        typography = ClipTypography,
         content = content
     )
 }

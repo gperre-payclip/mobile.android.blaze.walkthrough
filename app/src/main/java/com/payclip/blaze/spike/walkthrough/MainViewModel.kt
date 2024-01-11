@@ -19,11 +19,14 @@ internal class MainViewModel @Inject constructor() : ViewModel() {
     val selectedStep: StateFlow<Int>
         get() = _selectedStep
 
+    fun onFinishWalkthrough() = viewModelScope.launch {
+        _isWalkthroughActive.emit(false)
+    }
+
     fun goNextStep() = viewModelScope.launch {
         if (selectedStep.value < 3) {
             _selectedStep.value++
         } else {
-            _isWalkthroughActive.emit(false)
             _selectedStep.emit(0)
         }
     }
