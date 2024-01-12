@@ -1,9 +1,13 @@
 package com.payclip.blaze.spike.walkthrough
 
+import android.content.Context
+import android.content.ContextWrapper
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.annotation.ColorInt
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateIntOffsetAsState
 import androidx.compose.animation.core.animateIntSizeAsState
@@ -32,6 +36,7 @@ import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +56,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toOffset
 import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.zIndex
+import androidx.core.graphics.ColorUtils
 import com.payclip.blaze.spike.walkthrough.models.DialogBuilder
 import com.payclip.blaze.spike.walkthrough.models.SpotlightBuilder
 import com.payclip.blaze.spike.walkthrough.ui.theme.BlazeTheme
@@ -88,15 +95,16 @@ class MainActivity : ComponentActivity() {
 @ExperimentalMaterial3Api
 @Composable
 private fun MainContent(viewModel: MainViewModel) {
-    val isWalkthroughActive by viewModel.isWalkthroughActive.collectAsState()
+    val isWalkthroughEnabled by viewModel.isWalkthroughEnabled.collectAsState()
     val selectedStep by viewModel.selectedStep.collectAsState()
     val scope = rememberCoroutineScope()
     val lazyState = rememberLazyListState()
     val spotlight = remember { mutableStateOf(SpotlightBuilder()) }
 
-    if (isWalkthroughActive) {
-        Spotlight(spotlight = spotlight.value)
-    }
+    Spotlight(
+        isEnabled = isWalkthroughEnabled,
+        spotlight = spotlight.value
+    )
 
     LazyColumn(
         modifier = Modifier
@@ -109,6 +117,7 @@ private fun MainContent(viewModel: MainViewModel) {
             WalkthroughComponent(
                 spotlight = spotlight,
                 spotlightCornerRadius = 4.dp,
+                isEnabled = isWalkthroughEnabled,
                 isSelected = index == selectedStep,
                 dialog = DialogBuilder(
                     title = "Nueva venta",
@@ -123,8 +132,8 @@ private fun MainContent(viewModel: MainViewModel) {
                             } else {
                                 lazyState.scrollToItem(0)
                             }
-                            viewModel.goNextStep()
                         }
+                        viewModel.goNextStep()
                     },
                     onSecondaryButtonClick = {
                         // no-op
@@ -155,6 +164,7 @@ private fun MainContent(viewModel: MainViewModel) {
 private fun WalkthroughComponent(
     spotlight: MutableState<SpotlightBuilder>,
     spotlightCornerRadius: Dp = 0.dp,
+    isEnabled: Boolean,
     isSelected: Boolean,
     dialog: DialogBuilder,
     state: LazyListState = rememberLazyListState(),
@@ -163,7 +173,7 @@ private fun WalkthroughComponent(
     val tooltipState = rememberTooltipState(isPersistent = true)
 
     LaunchedEffect(isSelected) {
-        if (isSelected) {
+        if (isEnabled && isSelected) {
             tooltipState.show()
         } else {
             tooltipState.dismiss()
@@ -171,7 +181,7 @@ private fun WalkthroughComponent(
     }
 
     LaunchedEffect(tooltipState.isVisible) {
-        if (isSelected && !tooltipState.isVisible && !state.isScrollInProgress) {
+        if (isEnabled && isSelected && !tooltipState.isVisible && !state.isScrollInProgress) {
             dialog.onDismiss()
         }
     }
@@ -199,9 +209,10 @@ private fun WalkthroughComponent(
     ) {
         content(
             Modifier.setSpotlightLayout(
+                isEnabled = isEnabled && isSelected,
                 spotlight = spotlight,
-                isSelected = isSelected,
-                cornerRadius = spotlightCornerRadius
+                spotlightCornerRadius = spotlightCornerRadius,
+                state = state
             )
         )
     }
@@ -296,28 +307,30 @@ private fun WalkthroughDialog(
 }
 
 private fun Modifier.setSpotlightLayout(
+    isEnabled: Boolean,
     spotlight: MutableState<SpotlightBuilder>,
-    isSelected: Boolean,
-    cornerRadius: Dp = 0.dp
+    spotlightCornerRadius: Dp = 0.dp,
+    state: LazyListState
 ) = composed {
     val isPositioned = remember { mutableStateOf(false) }
     var position by remember { mutableStateOf(IntOffset.Zero) }
     var size by remember { mutableStateOf(IntSize.Zero) }
 
-    LaunchedEffect(isSelected, position, size) {
-        if (
-            !isPositioned.value &&
-            isSelected &&
-            position != IntOffset.Zero &&
-            size != IntSize.Zero
-        ) {
-            spotlight.value = SpotlightBuilder(
-                position = position,
-                size = size,
-                cornerRadius = cornerRadius
-            )
-            isPositioned.value = true
-        } else if (isPositioned.value  && !isSelected) {
+    LaunchedEffect(isEnabled, position, size, state.isScrollInProgress) {
+        val hasSpotlightChange = position != IntOffset.Zero && size != IntSize.Zero
+
+        if (isPositioned.value.not() && isEnabled && hasSpotlightChange) {
+            if (state.isScrollInProgress) {
+                spotlight.value = spotlight.value.copy(size = size)
+            } else {
+                spotlight.value = SpotlightBuilder(
+                    position = position,
+                    size = size,
+                    cornerRadius = spotlightCornerRadius
+                )
+                isPositioned.value = true
+            }
+        } else if (isPositioned.value  && !isEnabled) {
             isPositioned.value = false
         }
     }
@@ -340,7 +353,12 @@ private fun Modifier.setSpotlightLayout(
 }
 
 @Composable
-private fun Spotlight(spotlight: SpotlightBuilder) {
+private fun Spotlight(
+    isEnabled: Boolean,
+    spotlight: SpotlightBuilder
+) {
+    val context = LocalContext.current
+    val statusBarColor = remember { getStatusBarColor(context) }
     val size by animateIntSizeAsState(
         targetValue = spotlight.size,
         label = "Size Animation"
@@ -354,35 +372,78 @@ private fun Spotlight(spotlight: SpotlightBuilder) {
         label = "Corner Radius Animation"
     )
 
-    Canvas(
+    SideEffect {
+        setStatusBarColor(
+            context = context,
+            default = statusBarColor,
+            isEnabled = isEnabled
+        )
+    }
+
+    AnimatedVisibility(
         modifier = Modifier
             .fillMaxSize()
-            .zIndex(Float.MAX_VALUE)
-            .clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() },
-                onClick = {
-                    // no-op
-                }
-            ),
-        onDraw = {
-            val spotLightPath = Path().apply {
-                addRoundRect(
-                    roundRect = RoundRect(
-                        rect = Rect(
-                            offset = position.toOffset(),
-                            size = size.toSize()
-                        ),
-                        cornerRadius = CornerRadius(cornerRadius.toPx())
+            .zIndex(Float.MAX_VALUE),
+        visible = isEnabled
+    ) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() },
+                    onClick = {
+                        // no-op
+                    }
+                ),
+            onDraw = {
+                val spotLightPath = Path().apply {
+                    addRoundRect(
+                        roundRect = RoundRect(
+                            rect = Rect(
+                                offset = position.toOffset(),
+                                size = size.toSize()
+                            ),
+                            cornerRadius = CornerRadius(cornerRadius.toPx())
+                        )
                     )
-                )
+                }
+                clipPath(
+                    path = spotLightPath,
+                    clipOp = ClipOp.Difference
+                ) {
+                    drawRect(SolidColor(Color.Black.copy(alpha = 0.5F)))
+                }
             }
-            clipPath(
-                path = spotLightPath,
-                clipOp = ClipOp.Difference
-            ) {
-                drawRect(SolidColor(Color.Black.copy(alpha = 0.5F)))
-            }
+        )
+    }
+}
+
+private fun getStatusBarColor(context: Context): Int? {
+    return context.getActivity()?.window?.statusBarColor
+}
+
+private fun setStatusBarColor(
+    context: Context,
+    @ColorInt
+    default: Int?,
+    isEnabled: Boolean,
+) {
+    context.getActivity()?.let {
+        it.window.statusBarColor = if (isEnabled) {
+            ColorUtils.blendARGB(
+                default ?: android.graphics.Color.WHITE,
+                android.graphics.Color.BLACK,
+                0.5F
+            )
+        } else {
+            default ?: android.graphics.Color.WHITE
         }
-    )
+    }
+}
+
+private fun Context.getActivity(): ComponentActivity? = when (this) {
+    is ComponentActivity -> this
+    is ContextWrapper -> baseContext.getActivity()
+    else -> null
 }

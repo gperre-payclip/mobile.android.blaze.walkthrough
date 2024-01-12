@@ -11,16 +11,16 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 internal class MainViewModel @Inject constructor() : ViewModel() {
 
-    private val _isWalkthroughActive = MutableStateFlow(true)
-    val isWalkthroughActive: StateFlow<Boolean>
-        get() = _isWalkthroughActive
+    private val _isWalkthroughEnabled = MutableStateFlow(true)
+    val isWalkthroughEnabled: StateFlow<Boolean>
+        get() = _isWalkthroughEnabled
 
     private val _selectedStep = MutableStateFlow(0)
     val selectedStep: StateFlow<Int>
         get() = _selectedStep
 
     fun onFinishWalkthrough() = viewModelScope.launch {
-        _isWalkthroughActive.emit(false)
+        _isWalkthroughEnabled.emit(false)
     }
 
     fun goNextStep() = viewModelScope.launch {
